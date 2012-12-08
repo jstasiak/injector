@@ -144,6 +144,23 @@ class MapBindProvider(ListOfProviders):
             map.update(provider.get())
         return map
 
+class AssistedFactoryProvider(Provider):
+
+    class AssistedFactory(object):
+        def __init__(self, injector, cls):
+            self._injector = injector
+            self._cls = cls
+
+        def create(self, **kwargs):
+            return self._injector.create_object(self._cls, additional_kwargs=kwargs)
+
+    _injector = None
+
+    def __init__(self, cls):
+        self._cls = cls
+
+    def get(self):
+        return self.AssistedFactory(self._injector, self._cls)
 
 # These classes are used internally by the Binder.
 class BindingKey(tuple):
@@ -254,6 +271,8 @@ class Binder(object):
 
     def provider_for(self, interface, to=None):
         if isinstance(to, Provider):
+            if isinstance(to, AssistedFactoryProvider):
+                to._injector = self.injector
             return to
         elif isinstance(to, (types.FunctionType, types.LambdaType,
                              types.MethodType, types.BuiltinFunctionType,
@@ -469,8 +488,10 @@ class Injector(object):
                         'with Binder.bind_scope(scope_cls)' % e)
         return scope_instance.get(key, binding.provider).get()
 
-    def create_object(self, cls):
+    def create_object(self, cls, additional_kwargs=None):
         """Create a new instance, satisfying any dependencies on cls."""
+
+        additional_kwargs = additional_kwargs or {}
         instance = cls.__new__(cls)
         try:
             self.install_into(instance)
@@ -478,9 +499,9 @@ class Injector(object):
             # Some builtin types can not be modified.
             pass
         try:
-            instance.__init__()
+            instance.__init__(**additional_kwargs)
         except TypeError as e:
-            raise CallError(instance, instance.__init__.__func__, (), {}, e)
+            raise CallError(instance, instance.__init__.__func__, (), additional_kwargs, e)
         return instance
 
     def install_into(self, instance):

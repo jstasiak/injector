@@ -19,7 +19,7 @@ import pytest
 from injector import (Binder, CallError, Injector, Scope, InstanceProvider, ClassProvider,
         inject, singleton, threadlocal, UnsatisfiedRequirement,
         CircularDependency, Module, provides, Key, extends, SingletonScope,
-        ScopeDecorator, with_injector)
+        ScopeDecorator, with_injector, AssistedFactoryProvider)
 
 
 def prepare_basic_injection():
@@ -642,3 +642,20 @@ def test_call_to_method_containing_noninjectable_and_unsatisfied_dependencies_ra
 
         assert (ce.args[2] == ())
         assert (ce.args[3] == {'something': str()})
+
+def test_assisted_factory_provider_works():
+    class A(object):
+        @inject(aaa=str)
+        def __init__(self, aaa, bbb):
+            self.aaa = aaa
+            self.bbb = bbb
+
+    AFactory = Key('AFactory')
+    def conf(binder):
+        binder.bind(AFactory, to=AssistedFactoryProvider(A))
+
+    injector = Injector(conf)
+    factory = injector.get(AFactory)
+    a = factory.create(bbb=123)
+    assert (a.aaa == str())
+    assert (a.bbb == 123)
